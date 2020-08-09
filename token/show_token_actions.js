@@ -8,8 +8,26 @@
 * with enormous help on the button events (and no blame to be attributed to): Skimble#8601
 */
 
+function actionOnClick() {
+        return `
+        let actions = document.querySelectorAll('#selectedActionDropdown')
+        for ( const [index, action] of actions.entries() ) {
+            let actor = canvas.tokens.controlled[index].actor;
+            const items = actor ? actor.items.filter(i => i.name === action.value) : [];
+            let item = items[0];
+            // Trigger the item roll
+            if ( item.data.type === 'spell' ) {
+                actor.useSpell(item);
+            } else {
+                item.roll();
+            }
+            
+        }`;
+}
+
 class ActionDialog extends Application {
-    super(options){
+    constructor(options) {
+        super(options);
     }
 
     activateListeners(html) {
@@ -50,21 +68,6 @@ class ActionDialog extends Application {
     } 
 
     getData(){
-        // Get user's character or the first token from the controlled list.
-        function getTargetActor() {
-            const character = game.user.character;
-            if (character != null)
-                return character;
-
-            const controlled = canvas.tokens.controlled;
-
-            if (controlled.length === 0) return character || null;
-
-            if (controlled.length > 0 && controlled[0] != null) {
-                return controlled[0].actor;
-            }
-        }
-
         function buildActionsList(targetActor) {
             let equipped = targetActor.data.items.filter(i => i.type !="consumable" && i.data.equipped);
             let activeEquipped = getActiveEquipment(equipped);
@@ -303,7 +306,6 @@ class ActionDialog extends Application {
                 grid-template-columns: repeat(5, 1fr);
                 grid-gap: 10px;
             }
-
             .show-action-buttons button {
                 width: auto;
                 height: auto;
@@ -326,7 +328,6 @@ class ActionDialog extends Application {
               .show-action-buttons button.active {
                 background-color: #ccc;
               }
-
               .show-action-categories {
                 clear: both;
               }
@@ -340,18 +341,15 @@ class ActionDialog extends Application {
                 border-left: none;
                 border-right: none;
               }
-
               .show-action-tabcontent-title {
                     clear: both;
                     font-size: large;
               }
-
               .show-action-tabcontent-subtitle {
                   padding: 5px;
                   margin: 2px;
                   float: left;
               }
-
               .show-action-tabcontent input {
                 border: 1px solid #555;
                 padding: 5px;
@@ -368,30 +366,52 @@ class ActionDialog extends Application {
             return `game.dnd5e.rollItemMacro(&quot;${itemName}&quot;)`;
         }
 
-        // set this to true if you want results whispered to the GM
-        let targetActor = getTargetActor();
-        let innerContent = "";
+        function getDropdown(token) {
+            let actions = buildActionsList(token.actor);
+            let base = `
+<div>
+    <div class="form-group">
+        <label>Choose action for ${token.name}</label>
+        <select id="selectedActionDropdown">`;
+            for ( let weapon of actions.equipment.weapons ) {
+                base += `<option onclick="${getRollItemMacro(weapon.name)}">${weapon.name}</option>"`
+            }
+            base += `
+        </select>
+    </div>
+</div>`;
+            return base;
+       }
 
-        if (targetActor != null || targetActor) {
-            this.options.title = `${targetActor.name} actions`;
-            let actionLists = buildActionsList(targetActor);
-            innerContent = getContentTemplate(actionLists);
-        } else {
-            ui.notifications.error("No token selected or user character found.");
-            throw new Error("No token selected or character found");
+        this.options.title = `Pick Attacks`;
+        let template = `
+<div id="actionDialog">
+    ${getCssStyle()}
+`;
+        for ( let token of canvas.tokens.controlled ){
+            template += getDropdown(token);
         }
-        
-        var content =  `<div id="actionDialog">${innerContent}</div>`;
-        var contentsObject = {content:`${content}`}
+        template += `</div>`
+
+        var content =  `
+<div id="actionDialog">
+  ${template}
+  <input id="actionSubmission" type="button" value="Submit" onClick="${actionOnClick()}">
+</div>
+
+`;
+        var contentsObject = {
+            content:`${content}`
+}
         return contentsObject;
     }
 }
+
 
 let opt=Dialog.defaultOptions;
 opt.resizable=true;
 opt.title="Choose action";
 opt.minimizable=true;
-opt.width=600;
 var viewer;
 viewer = new ActionDialog(opt);
 viewer.render(true);
